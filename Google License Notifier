@@ -1,0 +1,72 @@
+// get all license assignments
+function getLicenses() {
+
+    // get access to the google sheet where we'll write the output
+    const sheet = SpreadsheetApp.getActive().getSheetByName("License Notifier")
+    const domainName = Session.getActiveUser().getEmail().replace(/.*@/, "") // or "yourdomain.com"
+    const fileArray = [
+        ["User Email", "Assigned License"]
+    ]
+
+
+    /*
+    productIds are required to get license assignment list, following product ids are taken from Google ent license
+     api https://developers.google.com/admin-sdk/licensing/v1/how-tos/products
+     */
+
+
+    const productIds = ["Google-Apps"]
+    productIds.forEach(product => {
+        /*  call enterprise license api to get list of license assignment in our domain looping for all google productsIds above
+        make sure to add Admin license manager service
+         */
+
+        var pageToken;
+
+        do {
+            let optionalArgs = {
+                maxResults: 100,
+                pageToken: pageToken
+            }
+
+            const page = AdminLicenseManager.LicenseAssignments.listForProduct(product, domainName, optionalArgs)
+            const licenses = page.items
+            pageToken = page.nextPageToken;
+            licenses.forEach(prod => {
+                fileArray.push([prod.userId, prod.skuName])
+
+            })
+        } while (pageToken)
+    })
+ //Delete contents of "A:A" in New Sheet
+    var sh1 = SpreadsheetApp.getActive().getSheetByName("License Notifier").getRange("A:B");
+    sh1.clearContent();
+    // write the licenses assignment outback back to our google sheet
+    sheet.getRange(1, 1, fileArray.length, 2).setValues(fileArray)
+
+
+
+    // Notification to Admins
+    const threshold = sheet.getRange("J2").getValue(); // change the column/range as /if required
+    const emailToRemind = sheet.getRange("i2").getValue(); // change the column/range as /if required
+    const getRows = sheet.getRange("H:H").getValues().filter(String).length - 1; // change the column/range as /if required
+    const licensesLeftArray = sheet.getRange(2, 8, getRows, 1).getValues(); // change the column/range as /if required
+
+    // change the email subject and/or body as required
+    const emailSubject = "Time to purchase Google Workspace licenses"
+    const emailBody = `Our Google Workspace Licenses are running low, and we need to purchase more. Go to the following link with your Google Admin account to purchase more licenses:https://admin.google.com/ac/billing/buy?action=INCREASE_COMMITMENT&sku_id=GOOGLE.GAETP_STARTER&region_code=US&currency_code=USD&existing_subscription_id=YdGyhY1KL1NOb0M0D2hgVQ&existing_plan_id=aMrpgIOnmo4K_xhpObMhy9eAroZO_rRUiPEEjPCWh3KF9iJNAe5zDetB9ZExJDvm
+
+    Once licenses are purchased, please edit column F2 in this sheet https://docs.google.com/spreadsheets/d/1USzhAuK0nEWDvpCWjnVWxbs5efpbjS83M2ZvjZZE_f4/edit#gid=0
+
+
+`
+
+    // send email if licenses left for any sku are equal or below threshold defined in google sheet
+
+
+    if (licensesLeftArray.some(licensesLeft => licensesLeft <= threshold)) {
+        MailApp.sendEmail(emailToRemind, emailSubject, emailBody)
+    }
+
+
+}
